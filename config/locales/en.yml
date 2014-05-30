@@ -4,3 +4,6 @@ en:
   custom_report: "custom_report"
   label_horizontal_field: "horizontal_field"
   label_vertical_field: "vertical_field"
+  label_report_query: "custom_report"
+  label_my_report_queries: "my_custom_report"
+  label_report_query_plural: "custom_report"
