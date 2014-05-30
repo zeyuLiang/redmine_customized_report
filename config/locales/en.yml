@@ -1,0 +1,6 @@
+# English strings go here for Rails i18n
+en:
+  # my_label: "My label"
+  custom_report: "custom_report"
+  label_horizontal_field: "horizontal_field"
+  label_vertical_field: "vertical_field"

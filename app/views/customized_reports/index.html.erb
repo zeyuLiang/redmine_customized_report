@@ -1,0 +1,158 @@
+<h2><%= l(:custom_report)%></h2>
+<div class="contextual">
+<% if !@query.new_record? && @query.editable_by?(User.current) %>
+  <%= link_to l(:button_edit), edit_report_query_path(@query), :class => 'icon icon-edit' %>
+  <%= delete_link report_query_path(@query) %>
+<% end %>
+</div>
+
+<h2><%= @query.new_record? ? "" : h(@query.name) %></h2>
+
+<%= form_tag({:controller => 'customized_reports', :action => 'index',
+             :id => @project},:method => :get, :id => 'query_form') do %>
+<%= hidden_field_tag 'set_filter', '1' %>
+<fieldset class="collapsible collapsed">
+  <legend onclick="toggleFieldset(this);"><%= l(:label_options) %></legend>
+  <div>
+    <table>
+      <tr>
+        <td>
+          <fieldset>
+            <legend><%= l(:label_horizontal_field) %></legend>
+            <%= select_tag 'query[horizontal_field]', report_column_options_for_select(@query,'horizontal_field')%>
+          </fieldset>
+        </td>
+        <td>
+          <fieldset>
+            <legend><%= l(:label_vertical_field) %></legend>
+            <%= select_tag 'query[vertical_field]', report_column_options_for_select(@query,'vertical_field') %>
+          </fieldset>
+        </td>
+      </tr>
+    </table>
+  </div>
+</fieldset>
+<fieldset id="filters" class="collapsible <%= @query.new_record? ? "" : "collapsed" %>">
+  <legend onclick="toggleFieldset(this);"><%= l(:label_filter_plural) %></legend>
+  <div style="<%= @query.new_record? ? "" : "display: none;" %>">
+    <%= render :partial => 'queries/filters', :locals => {:query => @query} %>
+  </div>
+</fieldset>
+
+
+<p class="buttons">
+
+<%= link_to_function l(:button_apply), '$("#query_form").submit()',
+                     :class => 'icon icon-checked' %>
+<%= link_to l(:button_clear), { :project_id => @project, :set_filter => 1 },
+            :class => 'icon icon-reload' %>
+<% if @query.new_record? && User.current.allowed_to?(:save_queries, @project, :global => true) %>
+  <%= link_to_function l(:button_save),
+                       "$('#query_form').attr('action', '#{ @project ? new_project_report_query_path(@project) : new_report_query_path }').submit();",
+                       :class => 'icon icon-save' %>
+<% end %>
+</p>
+<% end %>
+
+
+<% content_for :sidebar do %>
+    <%= render :partial => 'sidebar' %>
+<% end %>
+
+
+  
+<% unless @data.present? && @result.present? %>
+    <p><i><%=l(:label_no_data)%></i></p>
+<% else %>
+<table class="list issue-report" id="report_table">
+<thead><tr>
+<th></th>
+<% for row in @rows%>
+<th><%=row[0] %></th>
+<% end %>
+<% if @h_field == 'status'%>
+<th><%=l(:label_open_issues_plural)%></th>
+<th><%=l(:label_closed_issues_plural)%></th>
+<% end %>
+<th><%=l(:label_total)%></th>
+</tr></thead>
+<tbody>
+<% for col in @cols %>
+<tr class="<%= cycle("odd", "even") %>">
+  <td class="name"><%= col[0] %></td>
+  <%for row in @rows%>
+  <td> <%= custom_report_link(@data[[row[1],col[1]]],@project,@h_filter.to_sym => row[1],@v_filter.to_sym => col[1]) %></td>
+  <% end %>
+  <% if @h_field == 'status'%>
+<td><%= custom_report_link( aggregate_of_status(@data,'col',col[1])[0],@project,@v_filter.to_sym => col[1],:h_status_filter_op => 'o') %></td>
+<td><%= custom_report_link( aggregate_of_status(@data,'col',col[1])[1],@project,@v_filter.to_sym => col[1],:h_status_filter_op => 'c') %></td>
+<% end %>
+  <td><%= custom_report_link( sum_of_data(@data,'col',col[1]),@project,@v_filter.to_sym => col[1]) %> </td>
+</tr>
+<% end %>
+</tbody>
+<tfoot>
+ <tr>
+   <th>Total</th>
+   <% for row in @rows%>
+     <th style="text-align: center;"></th>
+   <% end %>
+   <% if @h_field == 'status'%>
+	<th style="text-align: center;"></th>
+	<th style="text-align: center;"></th>
+	<% end %>
+   <th style="text-align: center;"></th>
+ </tr>
+</tfoot>
+</table>
+<% end
+  reset_cycle %>
+<%= stylesheet_link_tag    "dataTables.tableTools.css", :plugin => "redmine_customized_report" %>
+<%= stylesheet_link_tag    "jquery.dataTables.css", :plugin => "redmine_customized_report" %>
+<%= javascript_include_tag "jquery.dataTables.min.js", :plugin => "redmine_customized_report" %>
+<%= javascript_include_tag "dataTables.tableTools.min.js", :plugin => "redmine_customized_report" %>
+
+
+<script type="text/javascript">
+$(document).ready( function () {
+  var table = $('#report_table').DataTable({
+     dom: 'T<"clear">lfrtip',
+     tableTools: {
+          "sSwfPath":"/plugin_assets/redmine_customized_report/swf/copy_csv_xls_pdf.swf" 
+      },
+    "footerCallback": function ( row, data, start, end, display ) {
+      var api = this.api();
+      // Remove the formatting to get integer data for summation
+      var intVal = function ( i ) {
+        if(isNaN(i))
+        { 
+          var pat = /<a.*?>(\d+)<\/a>/g;
+          var re = pat.exec(i);
+          return (re ? parseInt(re[1],10) : 0 ) ;
+        }
+        return i;
+      };                  
+      api.column().each( function ( el ) {
+        for (index = 1; index < el.length; ++index) {
+          var i = el[index];
+          var sum = api
+            .column( i )
+            .data()
+            .reduce( function (a,b) {
+              return intVal(a) + intVal(b);
+            });
+          var page_sum = api
+            .column( i, { page: 'current'} )
+            .data()
+            .reduce( function (a,b) {
+              return intVal(a) + intVal(b);
+            });
+          $( api.column( i ).footer() ).html(
+            page_sum 
+          );
+        }
+      });
+    }
+  });
+});
+</script>
