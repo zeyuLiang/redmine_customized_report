@@ -170,7 +170,7 @@ class ReportQuery < Query
 
     author_values = []
     author_values << ["<< #{l(:label_me)} >>", "me", 'wo'] if User.current.logged?
-    author_values += users.collect{|s| [s.name, s.id.to_s, s.pinyin] }
+    author_values += users.collect{|s| [s.name, s.id.to_s] }
     add_available_filter("author_id",
       :type => :list, :values => author_values
     ) unless author_values.empty?
@@ -178,7 +178,7 @@ class ReportQuery < Query
     assigned_to_values = []
     assigned_to_values << ["<< #{l(:label_me)} >>", "me", 'wo'] if User.current.logged?
     assigned_to_values += (Setting.issue_group_assignment? ?
-                              principals : users).collect{|s| [s.name, s.id.to_s, s.pinyin] }
+                              principals : users).collect{|s| [s.name, s.id.to_s] }
     add_available_filter("assigned_to_id",
       :type => :list_optional, :values => assigned_to_values
     ) unless assigned_to_values.empty?
