@@ -257,8 +257,9 @@ class ReportQuery < Query
   	  hd_field_sym = "INNER JOIN custom_values ON custom_values.customized_id = issues.id AND custom_values.customized_type = 'Issue' AND custom_values.custom_field_id = #{$1}"
   	  hd_field_id = "custom_values.value"
   	else
-  	  hd_field_sym = horizontal_field.to_sym
-  	  hd_field_id = horizontal_field + '_id'
+      hd_field_sym = horizontal_field.to_sym
+      hd_field_sel = vertical_field == "group" || vertical_field =~ /cf_(\d+)$/ ? "#{horizontal_field}_id" :  "issues.#{horizontal_field}_id AS #{horizontal_field}_id"
+  	  hd_field_id = 'issues.' + horizontal_field + '_id'
   	end
   	  
     if vertical_field == "group"
@@ -268,17 +269,19 @@ class ReportQuery < Query
   	  vd_field_sym = "INNER JOIN custom_values ON custom_values.customized_id = issues.id AND custom_values.customized_type = 'Issue' AND custom_values.custom_field_id = #{$1}"
   	  vd_field_id = "custom_values.value"
   	else
-  	  vd_field_sym = vertical_field.to_sym
-  	  vd_field_id = vertical_field + '_id'
+      vd_field_sym = vertical_field.to_sym
+      vd_field_sel = horizontal_field == "group" || horizontal_field =~ /cf_(\d+)$/ ? "#{vertical_field}_id" : "issues.#{vertical_field}_id AS #{vertical_field}_id"
+  	  vd_field_id = 'issues.' + vertical_field + '_id'
   	end 
 
     data = nil
     rows = []
     cols = []
     r = {}
+
     begin
-      data = Issue.select(hd_field_id).
-      select(vd_field_id).
+      data = Issue.select(hd_field_sel).
+      select(vd_field_sel).
       joins(hd_field_sym).
       joins(vd_field_sym).
       joins(:project).
@@ -305,7 +308,7 @@ class ReportQuery < Query
   rescue ::ActiveRecord::StatementInvalid => e
     raise StatementInvalid.new(e.message)
   end
-
+  
   def find_name(rows,field)
     rows_detail=[]
     rows.map do |row|
