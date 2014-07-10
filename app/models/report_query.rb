@@ -250,47 +250,100 @@ class ReportQuery < Query
   # return data like {:data =>{[horizontal_field_id,vertical_field_id]=>count,..},:rows=>[[field_name,field_id],..],:cols=>[[field_name,field_id],..]}
   # for example {:data => {[1,2]=>10,[2,3]=>11,[3,4]=>15}},:rows=>[['rname1',1],['rname2',2],['rname3',3]],:cols=>[['cname2',2],['cname3',3],['cname4',4]]}
   def count_and_group_by()
-  	if horizontal_field == "group"
-  	  hd_field_sym = "INNER JOIN (SELECT user_id,group_id FROM groups_users UNION SELECT id AS user_id, id AS group_id FROM users WHERE TYPE = 'Group') AS groups_users ON issues.assigned_to_id = groups_users.user_id "
-  	  hd_field_id = horizontal_field + '_id'
-  	elsif horizontal_field =~ /cf_(\d+)$/
-  	  hd_field_sym = "INNER JOIN custom_values ON custom_values.customized_id = issues.id AND custom_values.customized_type = 'Issue' AND custom_values.custom_field_id = #{$1}"
-  	  hd_field_id = "custom_values.value"
-  	else
-      hd_field_sym = horizontal_field.to_sym
-      hd_field_sel = vertical_field == "group" || vertical_field =~ /cf_(\d+)$/ ? "#{horizontal_field}_id" :  "issues.#{horizontal_field}_id AS #{horizontal_field}_id"
-  	  hd_field_id = 'issues.' + horizontal_field + '_id'
-  	end
-  	  
-    if vertical_field == "group"
-  	  vd_field_sym = "INNER JOIN (SELECT user_id,group_id FROM groups_users UNION SELECT id AS user_id, id AS group_id FROM users WHERE TYPE = 'Group') AS groups_users ON issues.assigned_to_id = groups_users.user_id "
-  	  vd_field_id = vertical_field + '_id'
-  	elsif vertical_field =~ /cf_(\d+)$/
-  	  vd_field_sym = "INNER JOIN custom_values ON custom_values.customized_id = issues.id AND custom_values.customized_type = 'Issue' AND custom_values.custom_field_id = #{$1}"
-  	  vd_field_id = "custom_values.value"
-  	else
-      vd_field_sym = vertical_field.to_sym
-      vd_field_sel = horizontal_field == "group" || horizontal_field =~ /cf_(\d+)$/ ? "#{vertical_field}_id" : "issues.#{vertical_field}_id AS #{vertical_field}_id"
-  	  vd_field_id = 'issues.' + vertical_field + '_id'
-  	end 
 
     data = nil
     rows = []
     cols = []
     r = {}
 
-    begin
-      data = Issue.select(hd_field_sel).
-      select(vd_field_sel).
-      joins(hd_field_sym).
-      joins(vd_field_sym).
-      joins(:project).
-      where(statement).
-      group(hd_field_id,vd_field_id).
-      count
-    rescue ActiveRecord::RecordNotFound
-      data 
+    if horizontal_field =~ /cf_(\d+)$/ && vertical_field =~ /cf_(\d+)$/
+      begin
+        cf_h = CustomField.find(horizontal_field.sub("cf_", "").to_i)
+        if cf_h.field_format == "user"
+          hd_sel = "us_h.login AS cf1_value"
+          hd_sql = "INNER JOIN custom_values AS cf1 ON cf1.customized_id = issues.id AND cf1.customized_type = 'Issue'
+                    INNER JOIN `users` as us_h ON us_h.`id` = cf1.value"
+          hd_grp = "us_h.login"
+        elsif cf_h.field_format == "version"
+          hd_sel = "ve_h.name AS cf1_value"
+          hd_sql = "LEFT JOIN custom_values AS cf1 ON cf1.customized_id = issues.id AND cf1.customized_type = 'Issue'
+                    INNER JOIN `versions` as ve_h ON ve_h.`id` = cf1.value"
+          hd_grp = "cf1.value"
+        else
+          hd_sel = "cf1.value AS cf1_value"
+          hd_sql = "INNER JOIN custom_values AS cf1 ON cf1.customized_id = issues.id AND cf1.customized_type = 'Issue'"
+          hd_grp = "cf1.value"
+        end
+
+        cf_v = CustomField.find(vertical_field.sub("cf_", "").to_i)
+        if cf_v.field_format == "user"
+          vd_sel = "us_v.login AS cf2_value"
+          vd_sql = "LEFT JOIN custom_values AS cf2 ON cf2.customized_id = cf1.customized_id
+                    INNER JOIN `users` as us_v ON us_v.`id` = cf2.value"
+          vd_grp = "us_v.login"
+        elsif cf_v.field_format == "version"
+          vd_sel = "ve_v.name AS cf2_value"
+          vd_sql = "LEFT JOIN custom_values AS cf2 ON cf2.customized_id = cf1.customized_id
+                    INNER JOIN `versions` as ve_v ON ve_v.`id` = cf2.value"
+          vd_grp = "cf2.value"
+        else
+          vd_sel = "cf2.value AS cf2_value"
+          vd_sql = "LEFT JOIN custom_values AS cf2 ON cf2.customized_id = cf1.customized_id"
+          vd_grp = "cf2.value"
+        end
+
+        data= Issue.select(hd_sel).
+                    select(vd_sel).
+                    joins(hd_sql).
+                    joins(vd_sql).
+                    joins(:project).
+                    where(statement + " AND cf1.custom_field_id = #{cf_h.id} AND cf2.custom_field_id = #{cf_v.id}").
+                    group(hd_grp,vd_grp).
+                    count
+      rescue ActiveRecord::RecordNotFound
+        data 
+      rescue Exception => e
+        data
+      end
+    else
+      if horizontal_field == "group"
+        hd_field_sym = "INNER JOIN (SELECT user_id,group_id FROM groups_users UNION SELECT id AS user_id, id AS group_id FROM users WHERE TYPE = 'Group') AS groups_users ON issues.assigned_to_id = groups_users.user_id "
+        hd_field_id = horizontal_field + '_id'
+      elsif horizontal_field =~ /cf_(\d+)$/
+        hd_field_sym = "INNER JOIN custom_values ON custom_values.customized_id = issues.id AND custom_values.customized_type = 'Issue' AND custom_values.custom_field_id = #{$1}"
+        hd_field_id = "custom_values.value"
+      else
+        hd_field_sym = horizontal_field.to_sym
+        hd_field_sel = vertical_field == "group" || vertical_field =~ /cf_(\d+)$/ ? "#{horizontal_field}_id" :  "issues.#{horizontal_field}_id AS #{horizontal_field}_id"
+        hd_field_id = 'issues.' + horizontal_field + '_id'
+      end
+        
+      if vertical_field == "group"
+        vd_field_sym = "INNER JOIN (SELECT user_id,group_id FROM groups_users UNION SELECT id AS user_id, id AS group_id FROM users WHERE TYPE = 'Group') AS groups_users ON issues.assigned_to_id = groups_users.user_id "
+        vd_field_id = vertical_field + '_id'
+      elsif vertical_field =~ /cf_(\d+)$/
+        vd_field_sym = "INNER JOIN custom_values ON custom_values.customized_id = issues.id AND custom_values.customized_type = 'Issue' AND custom_values.custom_field_id = #{$1}"
+        vd_field_id = "custom_values.value"
+      else
+        vd_field_sym = vertical_field.to_sym
+        vd_field_sel = horizontal_field == "group" || horizontal_field =~ /cf_(\d+)$/ ? "#{vertical_field}_id" : "issues.#{vertical_field}_id AS #{vertical_field}_id"
+        vd_field_id = 'issues.' + vertical_field + '_id'
+      end 
+
+      begin
+        data = Issue.select(hd_field_sel).
+        select(vd_field_sel).
+        joins(hd_field_sym).
+        joins(vd_field_sym).
+        joins(:project).
+        where(statement).
+        group(hd_field_id,vd_field_id).
+        count
+      rescue ActiveRecord::RecordNotFound
+        data 
+      end
     end
+
     r[:data] = data
     data.each do |k,v|
       rows << k[0]
