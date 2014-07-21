@@ -9,6 +9,7 @@ class ReportQuery < Query
       [l(:field_assigned_to),"assigned_to"],
       [l(:field_category),"category"],
       [l(:field_fixed_version),"fixed_version"],
+      [l(:field_project),"project"],
       [l(:field_member_of_group),"group"]
       ]
   COLUMN_TYPES = { 
@@ -19,6 +20,7 @@ class ReportQuery < Query
     :assigned_to => "Principal",
     :category => "IssueCategory",
     :fixed_version => "Version",
+    :project => "Project",
     :group => "Group"
   }
 
