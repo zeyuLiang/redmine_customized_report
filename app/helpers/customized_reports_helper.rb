@@ -94,7 +94,7 @@ module CustomizedReportsHelper
       end
     end
     @query.filters.map do |key,value|
-      unless f.include?(key)
+      unless f.include?(key.to_sym)
         f << key
         values[key] = value[:values]
         op[key] = value[:operator]
